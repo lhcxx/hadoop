@@ -48,8 +48,10 @@ import org.apache.hadoop.yarn.server.nodemanager.containermanager.runtime.Contai
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.runtime.ContainerRuntimeConstants;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.runtime.ContainerRuntimeContext;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -145,6 +147,9 @@ public class DockerLinuxContainerRuntime implements LinuxContainerRuntime {
   @InterfaceAudience.Private
   public static final String ENV_DOCKER_CONTAINER_LOCAL_RESOURCE_MOUNTS =
       "YARN_CONTAINER_RUNTIME_DOCKER_LOCAL_RESOURCE_MOUNTS";
+  @InterfaceAudience.Private
+  public static final String ENV_DOCKER_CONTAINER_WHITE_LIST_MOUNTS =
+    "YARN_CONTAINER_RUNTIME_WHITE_LIST_MOUNTS";
 
   static final String CGROUPS_ROOT_DIRECTORY = "/sys/fs/cgroup";
 
@@ -374,6 +379,35 @@ public class DockerLinuxContainerRuntime implements LinuxContainerRuntime {
     }
 
     return true;
+
+}
+  private boolean isArbitraryMount(String mount) {
+    String[] whiteList = YarnConfiguration.DOCKER_WHITE_LIST_VOLUME_MOUNT.split(",");
+    File child = new File(mount);
+    for (int i = 0; i < whiteList.length; i++){
+      File parent = new File(mount);
+      if (isSubDirectory(parent, child)){
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private boolean isSubDirectory(File parent, File child){
+    try {
+      parent = parent.getCanonicalFile();
+      child = child.getCanonicalFile();
+      File parentFile = child;
+      while (parentFile != null){
+        if (parent.equals(parentFile)){
+          return true;
+        }
+        parentFile = parentFile.getParentFile();
+      }
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
+    return false;
   }
 
   @VisibleForTesting
@@ -477,6 +511,23 @@ public class DockerLinuxContainerRuntime implements LinuxContainerRuntime {
           String src = validateMount(dir[0], localizedResources);
           String dst = dir[1];
           runCommand.addMountLocation(src, dst + ":ro", true);
+        }
+      }
+    }
+
+    if (environment.containsKey(ENV_DOCKER_CONTAINER_WHITE_LIST_MOUNTS)) {
+      String mounts = environment.get(
+        ENV_DOCKER_CONTAINER_WHITE_LIST_MOUNTS);
+      if (!mounts.isEmpty()) {
+        for (String mount : StringUtils.split(mounts)) {
+          String[] dir = StringUtils.split(mount, ':');
+          if (dir.length != 2) {
+            throw new ContainerExecutionException("Invalid mount : " +
+              mount);
+          }
+          if (!isArbitraryMount(dir[0])) {
+            runCommand.addMountLocation(dir[0], dir[1] + ":ro");
+          }
         }
       }
     }

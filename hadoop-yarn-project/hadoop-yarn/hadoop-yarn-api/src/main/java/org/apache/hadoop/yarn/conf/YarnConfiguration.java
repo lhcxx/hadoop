@@ -1388,6 +1388,9 @@ public class YarnConfiguration extends Configuration {
   public static final String NM_DOCKER_CONTAINER_CAPABILITIES =
       DOCKER_CONTAINER_RUNTIME_PREFIX + "capabilities";
 
+  public static final String DOCKER_WHITE_LIST_VOLUME_MOUNT =
+      DOCKER_CONTAINER_RUNTIME_PREFIX + "white-list-volume-mount";
+
   /** These are the default capabilities added by docker. We'll use the same
    * set here. While these may not be case-sensitive from a docker
    * perspective, it is best to keep these uppercase.
